@@ -48,7 +48,7 @@ Any project that runs `graphify update`.
 
 1. You (or the agent) run `graphify update .` — or `graphify extract` / `graphify add` — through opencode's bash tool.
 2. **Prune**: nodes whose `source_file` does not resolve to a real file are dropped, along with every edge referencing them.
-3. **Connect**: if the repo has an `okf/` bundle, it is imported (`okf-bridge import`) and merged into `graphify-out/merged.json`. When the bundle has a `tables/` section, `okf-bridge link`'s output becomes the merge **base** and only the concepts whose ids it lacks are merged in — so ids are never duplicated.
+3. **Connect**: if the repo has an `okf/` bundle, it is imported (`okf-bridge import`) and merged into `merged.json` in the graph directory — `graphify-out/` by default, or wherever `GRAPHIFY_OUT` points. When the bundle has a `tables/` section, `okf-bridge link`'s output becomes the merge **base** and only the concepts whose ids it lacks are merged in — so ids are never duplicated.
 4. **Check**: when that work changed something, the bundle is validated (`okf-bridge validate --strict`) and you are told if `okf/` is missing from `.graphifyignore`. Skipped on a no-op, so silence still means "nothing to do".
 5. If nothing changed, it says nothing. Otherwise it appends one line to the tool output:
 
@@ -130,6 +130,8 @@ graphify query "which tables back the auth flow?" --graph graphify-out/merged.js
 | `graphify-out/merged.json` | code graph + your OKF bundle (only when `okf/` exists) |
 | `.tmp/okf-graph.json`, `.tmp/linked.json` | scratch inputs to the merge; safe to ignore or delete |
 
+Paths shown assume the default `graphify-out/`; they follow `GRAPHIFY_OUT` when it is set.
+
 ## 🔗 What each piece is
 
 | Piece | What it does | Install | Docs |
@@ -162,8 +164,9 @@ Pass them as the second element of a tuple entry:
 | Option      | Default | Meaning                                                                                  |
 | ----------- | ------- | ---------------------------------------------------------------------------------------- |
 | `bundleDir` | `"okf"` | Bundle directory to import, relative to the project root.                                 |
+| `graphDir`  | `GRAPHIFY_OUT` or `"graphify-out"` | Directory holding `graph.json` / `merged.json`; relative or absolute. |
 | `prune`     | `true`  | Drop graph nodes whose `source_file` does not resolve.                                    |
-| `connect`   | `true`  | Import the bundle and refresh `graphify-out/merged.json`.                                 |
+| `connect`   | `true`  | Import the bundle and refresh `merged.json` in the graph directory.                       |
 | `validate`  | `true`  | After a change: OKF conformance check + a `.graphifyignore` hint. Both skipped on a no-op. |
 
 ## 🧠 Notes
@@ -174,7 +177,7 @@ Pass them as the second element of a tuple entry:
 - **It resolves the project root** from a leading `cd <path> &&`, falling back to the session directory.
 - **Your `okf/` should be in `.graphifyignore`.** The bundle is already imported as `okf:<concept-id>` nodes; letting graphify index the same markdown as document nodes represents that knowledge twice.
 - **It only sees graphify run through OpenCode's bash tool.** `graphify hook install` (git post-commit) and `graphify watch` rebuild the graph elsewhere, so no refresh fires for those.
-- **`--out` moves the graph.** `graphify extract . --out DIR` writes to `DIR/graphify-out/`; the plugin only looks at the repo root, so it will not find that graph.
+- **`GRAPHIFY_OUT` is honoured.** If you keep the graph outside the repo root — e.g. `GRAPHIFY_OUT=.ai/graphify-out`, the layout `opencode-graphify-init` recommends — the plugin prunes and merges there. The `graphDir` option overrides the variable, and with `graphify extract . --out DIR` you can point `graphDir` at `DIR/graphify-out`.
 
 ## 🛠️ Development
 

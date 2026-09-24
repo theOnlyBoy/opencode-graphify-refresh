@@ -1,6 +1,6 @@
 {
   "name": "opencode-graphify-refresh",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenCode plugin — prunes broken graphify nodes and merges your OKF bundle after every graphify update.",
   "keywords": [
     "opencode",

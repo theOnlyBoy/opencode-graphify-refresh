@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0
+
+- Follows `GRAPHIFY_OUT` for the graph directory, so a graph kept outside the repo root — for
+  example `.ai/graphify-out`, as `opencode-graphify-init` uses — is pruned and merged in place. New
+  `graphDir` option overrides the environment variable; paths are resolved with `resolve`, so an
+  absolute `GRAPHIFY_OUT` works too.
+
 ## 0.1.0
 
 - Initial release.

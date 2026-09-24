@@ -6,6 +6,11 @@ import { join, resolve } from 'node:path'
 export interface GraphifyRefreshOptions {
   /** Bundle directory to import, relative to the project root. Default `okf`. */
   bundleDir?: string
+  /**
+   * Directory holding `graph.json` / `merged.json`, relative to the project root or absolute.
+   * Default `GRAPHIFY_OUT`, else `graphify-out`.
+   */
+  graphDir?: string
   /** Drop graph nodes whose `source_file` does not resolve to a real file. Default true. */
   prune?: boolean
   /** Import the OKF bundle and merge it into `graphify-out/merged.json`. Default true. */
@@ -14,8 +19,7 @@ export interface GraphifyRefreshOptions {
   validate?: boolean
 }
 
-const GRAPH_REL = 'graphify-out/graph.json'
-const MERGED_REL = 'graphify-out/merged.json'
+const DEFAULT_GRAPH_DIR = 'graphify-out'
 const TMP_REL = '.tmp'
 const OKF_INDEX = 'index.md'
 const TABLES_DIR = 'tables'
@@ -31,7 +35,32 @@ const TRIGGER = /^\s*(?:[A-Z_]+=\S+\s+)*graphify\s+(?:update|extract|add)\b/
 /** `graphify update --help` is a question, not a rebuild. */
 const HELP = /(?:^|\s)(?:--help|-h)(?=\s|$)/
 
-const DEFAULTS: Required<GraphifyRefreshOptions> = { bundleDir: 'okf', prune: true, connect: true, validate: true }
+const DEFAULTS = { bundleDir: 'okf', prune: true, connect: true, validate: true } as const
+
+/** Everything a refresh needs, with `graphDir` resolved from option → `GRAPHIFY_OUT` → default. */
+interface Config {
+  bundleDir: string
+  graphDir: string
+  prune: boolean
+  connect: boolean
+  validate: boolean
+}
+
+const resolveConfig = (options?: GraphifyRefreshOptions): Config => ({
+  bundleDir: options?.bundleDir ?? DEFAULTS.bundleDir,
+  graphDir: options?.graphDir ?? process.env.GRAPHIFY_OUT ?? DEFAULT_GRAPH_DIR,
+  prune: options?.prune ?? DEFAULTS.prune,
+  connect: options?.connect ?? DEFAULTS.connect,
+  validate: options?.validate ?? DEFAULTS.validate,
+})
+
+/**
+ * `resolve`, not `join`: `GRAPHIFY_OUT` may be an absolute path, and `graphify` / `okf-bridge`
+ * accept absolute paths fine — `join` would mangle it into `<root>/<abs>`.
+ */
+const graphFile = (root: string, graphDir: string): string => resolve(root, graphDir, 'graph.json')
+
+const mergedFile = (root: string, graphDir: string): string => resolve(root, graphDir, 'merged.json')
 
 interface GraphNode {
   id: string
@@ -93,11 +122,11 @@ const cdTarget = (command: string): string | null => {
   return match ? (match[1] ?? match[2] ?? match[3] ?? null) : null
 }
 
-const resolveRoot = (command: string, directory: string): string | null => {
+const resolveRoot = (command: string, directory: string, graphDir: string): string | null => {
   const target = cdTarget(command)
   const candidates = target ? [resolve(directory, target), directory] : [directory]
 
-  return candidates.find((candidate) => existsSync(join(candidate, GRAPH_REL))) ?? null
+  return candidates.find((candidate) => existsSync(graphFile(candidate, graphDir))) ?? null
 }
 
 /** Mirrors okf-bridge `linker._resolve_ast_source_file`. */
@@ -112,8 +141,8 @@ const isUnresolvableCodeNode = (root: string, node: GraphNode): boolean => {
 }
 
 /** Drops unresolvable code nodes and every edge referencing them. Returns what changed. */
-const pruneGraph = (root: string): { nodes: number; links: number } => {
-  const graphPath = join(root, GRAPH_REL)
+const pruneGraph = (root: string, graphDir: string): { nodes: number; links: number } => {
+  const graphPath = graphFile(root, graphDir)
   const graph = readJson<GraphJson>(graphPath)
   const doomed = new Set(graph.nodes.filter((node) => isUnresolvableCodeNode(root, node)).map((node) => node.id))
 
@@ -150,8 +179,9 @@ interface ConnectResult {
 
 const connectBundle = (
   root: string,
-  bundleDir: string,
+  config: Config,
 ): ConnectResult | { error: string } | { skipped: string } | null => {
+  const bundleDir = config.bundleDir
   const bundle = join(root, bundleDir)
 
   if (!existsSync(join(bundle, OKF_INDEX))) {
@@ -173,11 +203,12 @@ const connectBundle = (
   }
 
   const hasTables = existsSync(join(bundle, TABLES_DIR))
-  let base = GRAPH_REL
+  const graphPath = graphFile(root, config.graphDir)
+  let base = graphPath
 
   if (hasTables) {
     const linkedPath = join(tmp, 'linked.json')
-    const linked = sh('okf-bridge', ['link', GRAPH_REL, bundleDir, '-o', linkedPath, '--repo-root', '.'], root)
+    const linked = sh('okf-bridge', ['link', graphPath, bundleDir, '-o', linkedPath, '--repo-root', '.'], root)
 
     if (linked.failed) {
       return { error: `okf-bridge link failed: ${linked.stderr}` }
@@ -191,10 +222,10 @@ const connectBundle = (
     writeJson(importedPath, subtractNodes(readJson<GraphJson>(importedPath), seen))
   }
 
-  const mergedPath = join(root, MERGED_REL)
+  const mergedPath = mergedFile(root, config.graphDir)
   const before = existsSync(mergedPath) ? readFileSync(mergedPath, 'utf8') : null
 
-  const merged = sh('graphify', ['merge-graphs', base, importedPath, '--out', MERGED_REL], root)
+  const merged = sh('graphify', ['merge-graphs', base, importedPath, '--out', mergedPath], root)
 
   if (merged.failed) {
     return { error: `graphify merge-graphs failed: ${merged.stderr}` }
@@ -253,11 +284,11 @@ const bundleHealth = (root: string, bundleDir: string): string[] => {
   return notes
 }
 
-const refresh = (root: string, config: Required<GraphifyRefreshOptions>): string[] => {
+const refresh = (root: string, config: Config): string[] => {
   const notes: string[] = []
 
   if (config.prune) {
-    const pruned = pruneGraph(root)
+    const pruned = pruneGraph(root, config.graphDir)
 
     if (pruned.nodes > 0) {
       notes.push(`pruned ${pruned.nodes} node(s) + ${pruned.links} edge(s)`)
@@ -265,7 +296,7 @@ const refresh = (root: string, config: Required<GraphifyRefreshOptions>): string
   }
 
   if (config.connect) {
-    const connected = connectBundle(root, config.bundleDir)
+    const connected = connectBundle(root, config)
 
     if (connected && 'error' in connected) {
       notes.push(connected.error)
@@ -292,9 +323,9 @@ const refresh = (root: string, config: Required<GraphifyRefreshOptions>): string
  *  1. prunes graph nodes whose `source_file` does not resolve to a real file — graphify's
  *     dynamic-import rescue mints them from type-only `typeof import(...)` text, and `okf-bridge`
  *     aborts its whole run when it tries to read one; and
- *  2. connects the repo's OKF bundle (`okf/`) into `graphify-out/merged.json` via `okf-bridge
- *     import`, adding `okf-bridge link`'s code→table edges when the bundle has a `tables/` section;
- *     and
+ *  2. connects the repo's OKF bundle (`okf/`) into `merged.json` via `okf-bridge import`, adding
+ *     `okf-bridge link`'s code→table edges when the bundle has a `tables/` section; the graph
+ *     directory is `graphify-out/` by default and follows `GRAPHIFY_OUT` otherwise; and
  *  3. when that work changed something, checks the bundle — OKF conformance and whether the bundle
  *     directory is ignored.
  *
@@ -304,8 +335,6 @@ const refresh = (root: string, config: Required<GraphifyRefreshOptions>): string
  * must keep exactly one runtime export.
  */
 export const GraphifyRefresh: Plugin = async ({ directory }, options?: GraphifyRefreshOptions) => {
-  const config: Required<GraphifyRefreshOptions> = { ...DEFAULTS, ...(options ?? {}) }
-
   return {
     'tool.execute.after': async (input, output) => {
       if (input?.tool !== 'bash') {
@@ -321,7 +350,9 @@ export const GraphifyRefresh: Plugin = async ({ directory }, options?: GraphifyR
       let notes: string[]
 
       try {
-        const root = resolveRoot(command, directory)
+        // resolved per call so `GRAPHIFY_OUT` is read from the live environment
+        const config = resolveConfig(options)
+        const root = resolveRoot(command, directory, config.graphDir)
 
         if (!root) {
           return

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 
 /** Tests run against the built artifact — the same file the package publishes. */
 const PLUGIN = new URL('../dist/index.js', import.meta.url).href
@@ -87,6 +87,14 @@ const writeFixture = (root) => {
       2,
     ),
   )
+}
+
+/** Same phantom fixture, but the graph lives where `GRAPHIFY_OUT` points. */
+const writeFixtureAt = (root, graphDir) => {
+  writeFixture(root)
+  mkdirSync(`${root}/${graphDir}`, { recursive: true })
+  renameSync(`${root}/graphify-out/graph.json`, `${root}/${graphDir}/graph.json`)
+  rmSync(`${root}/graphify-out`, { recursive: true, force: true })
 }
 
 /** Phantom fixture plus a minimal `okf/` bundle with a `tables/` section — the link path. */
@@ -343,6 +351,57 @@ await check('validate: false skips the bundle health checks', async () => {
   assert.doesNotMatch(output.output, /okf-bridge validate/)
 
   return 'health checks skipped'
+})
+
+await check('hook follows GRAPHIFY_OUT when the graph lives elsewhere', async () => {
+  writeFixtureAt(FIXTURE, '.ai/graphify-out')
+  process.env.GRAPHIFY_OUT = '.ai/graphify-out'
+
+  try {
+    const output = await runHook(FIXTURE, 'graphify update .')
+    assert.match(output, /pruned 2 node\(s\)/)
+    const graph = JSON.parse(readFileSync(`${FIXTURE}/.ai/graphify-out/graph.json`, 'utf8'))
+    assert.equal(graph.nodes.length, 3, 'the graph at GRAPHIFY_OUT must be the one pruned')
+
+    return 'GRAPHIFY_OUT honoured'
+  } finally {
+    delete process.env.GRAPHIFY_OUT
+  }
+})
+
+await check('graphDir option overrides GRAPHIFY_OUT', async () => {
+  writeFixture(FIXTURE) // graph at the default graphify-out/
+  process.env.GRAPHIFY_OUT = '.ai/graphify-out' // decoy — nothing there
+
+  try {
+    const hooks = await factory({ directory: FIXTURE }, { graphDir: 'graphify-out' })
+    const output = { output: 'x' }
+    await hooks['tool.execute.after'](
+      { tool: 'bash', args: { command: `cd ${FIXTURE} && graphify update .` } },
+      output,
+    )
+
+    assert.match(output.output, /pruned 2 node\(s\)/)
+
+    return 'option wins over env'
+  } finally {
+    delete process.env.GRAPHIFY_OUT
+  }
+})
+
+await check('hook no-ops when GRAPHIFY_OUT points at nothing', async () => {
+  writeFixture(FIXTURE) // graph at graphify-out/, env points elsewhere
+  process.env.GRAPHIFY_OUT = '.ai/graphify-out'
+
+  try {
+    const output = await runHook(FIXTURE, 'graphify update .')
+    assert.equal(output, 'raw tool output', 'an unresolved root must stay silent')
+    assert.equal(JSON.parse(readFileSync(GRAPH(FIXTURE), 'utf8')).nodes.length, 5, 'fixture must be untouched')
+
+    return 'no-op, no throw'
+  } finally {
+    delete process.env.GRAPHIFY_OUT
+  }
 })
 
 for (const [name, status, detail] of results) {
