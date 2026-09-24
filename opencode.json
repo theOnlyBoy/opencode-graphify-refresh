@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["./dist/index.js"],
+  "tools": {
+    "gh_grep_*": false,
+    "playwright_*": false,
+    "openpencil_*": false,
+    "webstorm-index_*": false,
+    "webstorm-debugger_*": false,
+    "logfire_*": false
+  }
+}
