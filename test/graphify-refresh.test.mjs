@@ -16,6 +16,9 @@ const hasOkfBridge = (() => {
 
 const FIXTURE = '/tmp/graphify-plugin-fixture'
 const BUNDLE_FIXTURE = '/tmp/graphify-plugin-fixture-bundle'
+/** A second repo — proves the refresh follows the command's `cd`, not the session directory. */
+const OTHER_FIXTURE = '/tmp/graphify-plugin-fixture-other'
+
 const GRAPH = (root) => `${root}/graphify-out/graph.json`
 const MERGED = (root) => `${root}/graphify-out/merged.json`
 
@@ -235,6 +238,97 @@ await check('hook fires when another plugin prepends an echo to the same command
 
   assert.match(output.output, /pruned 2 node\(s\)/, 'the update behind the echo must still fire')
   return output.output.replace('\n', ' ⏎ ')
+})
+
+await check('hook follows a mid-command `cd` instead of the session directory', async () => {
+  writeFixture(FIXTURE) // the session repo: has its own graph, so a fallback would refresh it
+  writeFixture(OTHER_FIXTURE) // the repo the command actually targets
+
+  const hooks = await factory({ directory: FIXTURE }, {})
+  const output = { output: 'raw tool output' }
+
+  // Observed live: a leading assignment/cleanup segment hides the `cd`, and an anchored
+  // whole-string `/^\s*cd/` anchor resolves the session dir instead — refreshing the wrong repo.
+  await hooks['tool.execute.after'](
+    {
+      tool: 'bash',
+      args: {
+        command: `rm -rf /tmp/graphify-plugin-scratch ; cd ${OTHER_FIXTURE} && graphify update .`,
+      },
+    },
+    output,
+  )
+
+  assert.match(output.output, /pruned 2 node\(s\)/, 'the targeted repo must be refreshed')
+  assert.equal(
+    JSON.parse(readFileSync(GRAPH(OTHER_FIXTURE), 'utf8')).nodes.length,
+    3,
+    'the targeted graph must be pruned',
+  )
+  assert.equal(
+    JSON.parse(readFileSync(GRAPH(FIXTURE), 'utf8')).nodes.length,
+    5,
+    'the session graph must stay untouched',
+  )
+
+  return output.output.replace('\n', ' ⏎ ')
+})
+
+await check('hook accumulates a chain of relative `cd` segments', async () => {
+  writeFixture(FIXTURE)
+  writeFixture(OTHER_FIXTURE)
+
+  const hooks = await factory({ directory: FIXTURE }, {})
+  const output = { output: 'raw tool output' }
+
+  // `cd ..` lands in /tmp, so the second hop resolves from there — not from the session directory.
+  await hooks['tool.execute.after'](
+    {
+      tool: 'bash',
+      args: { command: `cd .. && cd graphify-plugin-fixture-other && graphify update .` },
+    },
+    output,
+  )
+
+  assert.match(output.output, /pruned 2 node\(s\)/, 'the chained target must be refreshed')
+  assert.equal(JSON.parse(readFileSync(GRAPH(OTHER_FIXTURE), 'utf8')).nodes.length, 3, 'chained target pruned')
+  assert.equal(JSON.parse(readFileSync(GRAPH(FIXTURE), 'utf8')).nodes.length, 5, 'session graph untouched')
+
+  return output.output.replace('\n', ' ⏎ ')
+})
+
+await check('hook ignores a `cd` that runs after the trigger', async () => {
+  writeFixture(FIXTURE)
+  writeFixture(OTHER_FIXTURE)
+
+  const hooks = await factory({ directory: FIXTURE }, {})
+  const output = { output: 'raw tool output' }
+
+  await hooks['tool.execute.after'](
+    {
+      tool: 'bash',
+      args: { command: `cd ${FIXTURE} && graphify update . && cd ${OTHER_FIXTURE}` },
+    },
+    output,
+  )
+
+  assert.match(output.output, /pruned 2 node\(s\)/, 'the repo the trigger ran in must be refreshed')
+  assert.equal(JSON.parse(readFileSync(GRAPH(FIXTURE), 'utf8')).nodes.length, 3, 'trigger repo pruned')
+  assert.equal(JSON.parse(readFileSync(GRAPH(OTHER_FIXTURE), 'utf8')).nodes.length, 5, 'later `cd` target untouched')
+
+  return output.output.replace('\n', ' ⏎ ')
+})
+
+await check('hook falls back to the session directory when the `cd` target has no graph', async () => {
+  writeFixture(FIXTURE)
+
+  // README contract: a `cd` that cannot be a project root falls back to the session directory.
+  const output = await runHook(FIXTURE, 'cd /nonexistent-graphify-dir && graphify update .')
+
+  assert.match(output, /pruned 2 node\(s\)/, 'the session repo must be refreshed')
+  assert.equal(JSON.parse(readFileSync(GRAPH(FIXTURE), 'utf8')).nodes.length, 3, 'session graph pruned')
+
+  return output.replace('\n', ' ⏎ ')
 })
 
 await check('hook ignores --help invocations', async () => {

@@ -174,7 +174,7 @@ Pass them as the second element of a tuple entry:
 - **It fires per segment, not per string.** Several opencode plugins rewrite the same bash command; the project-level graphify plugin prepends a reminder `echo` to your session's first call. The plugin splits the command on `&&`, `||`, `;` and newlines and judges each segment, so a real `graphify update` is never masked by that echo.
 - **It ignores `--help`** and read-only commands (`grep`, `cat`, `echo`, …).
 - **It never throws.** A failure is reported in the tool output, never propagated into your session.
-- **It resolves the project root** from a leading `cd <path> &&`, falling back to the session directory.
+- **It resolves the project root** from a `cd <path>` in the command chain — walked segment by segment, so a preceding `;`/`&&` step does not hide it — falling back to the session directory only when that directory has the graph.
 - **Your `okf/` should be in `.graphifyignore`.** The bundle is already imported as `okf:<concept-id>` nodes; letting graphify index the same markdown as document nodes represents that knowledge twice.
 - **It only sees graphify run through OpenCode's bash tool.** `graphify hook install` (git post-commit) and `graphify watch` rebuild the graph elsewhere, so no refresh fires for those.
 - **`GRAPHIFY_OUT` is honoured.** If you keep the graph outside the repo root — e.g. `GRAPHIFY_OUT=.ai/graphify-out`, the layout `opencode-graphify-init` recommends — the plugin prunes and merges there. The `graphDir` option overrides the variable, and with `graphify extract . --out DIR` you can point `graphDir` at `DIR/graphify-out`.
@@ -196,6 +196,15 @@ opencode           # run OpenCode from the project dir to test the plugin
 ```
 
 The plugin is registered in `./opencode.json` as `"./dist/index.js"`, so after rebuilding you can test changes right away — just restart OpenCode.
+
+### OpenCode plugin constraints
+
+Learned the hard way while building this one; a violation fails silently.
+
+- **Exactly one export.** opencode calls *every* export of the module as a plugin factory — the loader iterates `Object.values(module)` and invokes each one as `(PluginInput, options)`. Exporting a helper next to the plugin broke loading with `The "paths[0]" property must be of type string, got object`, and because a failed plugin is only *logged*, it simply never ran. Keep the plugin function as the module's only export; helpers stay module-private.
+- **ESM only.** The package needs `"type": "module"` (or the `.mjs` extension): a bare `.js` is parsed as CommonJS and its `import` statements fail.
+- **Never throw from a hook.** A throwing `tool.execute.after` can break a session — catch everything and report the failure in the tool output instead.
+- **Be idempotent and quiet.** A run with nothing to do must not mutate the graph and must not print anything.
 
 ## 🤝 Contributing
 

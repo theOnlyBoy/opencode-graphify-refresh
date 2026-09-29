@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- Resolves the refresh target per command **segment**, not from the start of the whole string. A call
+  like `rm -rf .tmp ; cd ../other-repo && graphify update .` previously found no leading `cd`, fell
+  back to the session directory and silently refreshed whichever repository opencode was sitting in.
+  Relative `cd`s in a chain now accumulate, and a `cd` after the trigger cannot retarget the refresh.
+  (Fixes a bug observed live while updating a second repository from a session rooted in another one.)
+
 ## 0.2.0
 
 - Follows `GRAPHIFY_OUT` for the graph directory, so a graph kept outside the repo root — for

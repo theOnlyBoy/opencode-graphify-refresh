@@ -115,18 +115,41 @@ const segments = (command: string): string[] =>
 const isActionable = (command: string): boolean =>
   segments(command).some((segment) => TRIGGER.test(segment) && !HELP.test(segment))
 
-/** `cd <path> && graphify update .` — the root the command actually ran in. */
-const cdTarget = (command: string): string | null => {
-  const match = /^\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/.exec(command)
+/** A `cd <path>` segment (optionally quoted), as the shell would accept it. */
+const cdTarget = (segment: string): string | null => {
+  const match = /^\s*cd\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/.exec(segment)
 
   return match ? (match[1] ?? match[2] ?? match[3] ?? null) : null
 }
 
+/**
+ * The root the triggering command actually ran in.
+ *
+ * Segment-scoped on purpose: a real call can change directory mid-chain —
+ * `rm -rf .tmp ; cd ../other-repo && graphify update .` — and anchoring on the whole string
+ * (`/^\s*cd/`) finds no leading `cd` there, so the root falls back to the *session* directory. That
+ * silently refreshes whichever repository the session happens to sit in instead of the one the
+ * command targeted. Walking the segments in order (following each `cd`, stopping at the first real
+ * `graphify update|extract|add`) keeps relative `cd`s cumulative and a trailing `cd` — which runs
+ * after the trigger — unable to retarget the refresh.
+ */
 const resolveRoot = (command: string, directory: string, graphDir: string): string | null => {
-  const target = cdTarget(command)
-  const candidates = target ? [resolve(directory, target), directory] : [directory]
+  let cwd = directory
 
-  return candidates.find((candidate) => existsSync(graphFile(candidate, graphDir))) ?? null
+  for (const segment of segments(command)) {
+    const target = cdTarget(segment)
+
+    if (target !== null) {
+      cwd = resolve(cwd, target)
+      continue
+    }
+
+    if (TRIGGER.test(segment) && !HELP.test(segment)) {
+      break
+    }
+  }
+
+  return [cwd, directory].find((candidate) => existsSync(graphFile(candidate, graphDir))) ?? null
 }
 
 /** Mirrors okf-bridge `linker._resolve_ast_source_file`. */
