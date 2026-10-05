@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Readme updates.
+
 ## 0.3.0
 
 - OpenCode v2 support.
