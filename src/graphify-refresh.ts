@@ -38,7 +38,7 @@ const HELP = /(?:^|\s)(?:--help|-h)(?=\s|$)/
 const DEFAULTS = { bundleDir: 'okf', prune: true, connect: true, validate: true } as const
 
 /** Everything a refresh needs, with `graphDir` resolved from option → `GRAPHIFY_OUT` → default. */
-interface Config {
+export interface Config {
   bundleDir: string
   graphDir: string
   prune: boolean
@@ -46,7 +46,7 @@ interface Config {
   validate: boolean
 }
 
-const resolveConfig = (options?: GraphifyRefreshOptions): Config => ({
+export const resolveConfig = (options?: GraphifyRefreshOptions): Config => ({
   bundleDir: options?.bundleDir ?? DEFAULTS.bundleDir,
   graphDir: options?.graphDir ?? process.env.GRAPHIFY_OUT ?? DEFAULT_GRAPH_DIR,
   prune: options?.prune ?? DEFAULTS.prune,
@@ -112,7 +112,7 @@ const sh = (cmd: string, args: string[], cwd: string): CommandResult => {
 const segments = (command: string): string[] =>
   command.split(/\s*(?:&&|\|\||;|\n)\s*/).filter((segment) => segment.length > 0)
 
-const isActionable = (command: string): boolean =>
+export const isActionable = (command: string): boolean =>
   segments(command).some((segment) => TRIGGER.test(segment) && !HELP.test(segment))
 
 /** A `cd <path>` segment (optionally quoted), as the shell would accept it. */
@@ -133,7 +133,7 @@ const cdTarget = (segment: string): string | null => {
  * `graphify update|extract|add`) keeps relative `cd`s cumulative and a trailing `cd` — which runs
  * after the trigger — unable to retarget the refresh.
  */
-const resolveRoot = (command: string, directory: string, graphDir: string): string | null => {
+export const resolveRoot = (command: string, directory: string, graphDir: string): string | null => {
   let cwd = directory
 
   for (const segment of segments(command)) {
@@ -307,7 +307,7 @@ const bundleHealth = (root: string, bundleDir: string): string[] => {
   return notes
 }
 
-const refresh = (root: string, config: Config): string[] => {
+export const refresh = (root: string, config: Config): string[] => {
   const notes: string[] = []
 
   if (config.prune) {

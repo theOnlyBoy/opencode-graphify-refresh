@@ -1,6 +1,6 @@
 {
   "name": "opencode-graphify-refresh",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "OpenCode plugin — prunes broken graphify nodes and merges your OKF bundle after every graphify update.",
   "keywords": [
     "opencode",
@@ -26,6 +26,7 @@
     "url": "git+https://github.com/theOnlyBoy/opencode-graphify-refresh.git"
   },
   "files": [
+    "index.js",
     "dist"
   ],
   "type": "module",
@@ -43,7 +44,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "node test/graphify-refresh.test.mjs",
+    "test": "node test/graphify-refresh.test.mjs && node test/v2.test.mjs",
     "lint": "npx oxlint --type-aware --type-check",
     "lint:fix": "npx oxlint --type-aware --type-check --fix",
     "format:style": "npx oxfmt ./src",

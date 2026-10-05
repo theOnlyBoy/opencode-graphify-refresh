@@ -23,7 +23,8 @@ const GRAPH = (root) => `${root}/graphify-out/graph.json`
 const MERGED = (root) => `${root}/graphify-out/merged.json`
 
 const plugin = await import(PLUGIN)
-const factory = plugin.default
+/** v1 uses the dual entrypoint's `server(input, options)`; v2 uses `setup(ctx)`. */
+const factory = plugin.default.server
 
 /** 2 phantom nodes (bare-package source_file), 1 real file node, 1 concept, 1 empty-source node. */
 const writeFixture = (root) => {
@@ -134,16 +135,12 @@ const check = async (name, fn) => {
   }
 }
 
-await check('module exports one unique plugin factory (opencode calls every export as a plugin)', () => {
-  const values = Object.values(plugin)
-  assert.ok(values.length > 0, 'the module must export the plugin')
-  assert.equal(
-    new Set(values).size,
-    1,
-    'every export must be the same function reference — opencode invokes each export as a plugin factory',
-  )
-  assert.equal(typeof factory, 'function')
-  return `exports: ${Object.keys(plugin).join(', ')}`
+await check('module default export is the dual v1/v2 object (id + setup + server)', () => {
+  assert.equal(typeof plugin.default, 'object', 'a function default would fail v2')
+  assert.equal(plugin.default.id, 'graphify-refresh')
+  assert.equal(typeof plugin.default.setup, 'function', 'v2 entrypoint')
+  assert.equal(typeof plugin.default.server, 'function', 'v1 entrypoint')
+  return `id: ${plugin.default.id}`
 })
 
 await check('hook prunes phantoms and reports it', async () => {

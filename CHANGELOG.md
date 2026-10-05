@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- OpenCode v2 support.
+- Fixed a bug in v2 plugin registration.
+
 ## 0.2.1
 
 - Resolves the refresh target per command **segment**, not from the start of the whole string. A call
