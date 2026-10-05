@@ -3,7 +3,7 @@
 <p>
   <a href="https://www.npmjs.com/package/opencode-graphify-refresh"><img alt="npm version" src="https://img.shields.io/npm/v/opencode-graphify-refresh?color=blue"></a>
   <img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-green">
-  <img alt="OpenCode v1" src="https://img.shields.io/badge/OpenCode-v1-111">
+  <img alt="OpenCode v1 + v2" src="https://img.shields.io/badge/OpenCode-v1%20%7C%20v2-111">
   <img alt="node" src="https://img.shields.io/badge/node-%E2%89%A5%2022-brightgreen">
 </p>
 
@@ -146,7 +146,7 @@ Paths shown assume the default `graphify-out/`; they follow `GRAPHIFY_OUT` when 
 | **graphify** | builds and queries the code knowledge graph | `uv tool install graphifyy` | [docs](https://graphify.com/docs) · [repo](https://github.com/Graphify-Labs/graphify) · [PyPI](https://pypi.org/project/graphifyy/) |
 | **OKF** | Google's Open Knowledge Format — markdown concepts with frontmatter, optional `tables/` | — | [spec repo](https://github.com/GoogleCloudPlatform/knowledge-catalog) |
 | **okf-bridge** | imports an `okf/` bundle into the graph, links code→table edges, validates a bundle | `uv tool install graphify-okf-bridge` | [PyPI](https://pypi.org/project/graphify-okf-bridge/) |
-| **this plugin** | runs the prune + merge automatically after `graphify update` | `"plugin": ["opencode-graphify-refresh"]` | you're reading it |
+| **this plugin** | runs the prune + merge automatically after `graphify update` | `"plugin"` (v1) / `"plugins"` (v2): `["opencode-graphify-refresh"]` | you're reading it |
 
 > The PyPI package is `graphifyy` (double-y) and the command is `graphify` — other `graphify*` packages on PyPI are unrelated.
 
@@ -160,12 +160,14 @@ Nothing else is required: no API key, no network, no LLM.
 
 ## ⚙️ Options
 
-Pass them as the second element of a tuple entry:
+Pass them per runtime: v1 as a tuple's second element, v2 as the entry's `options` object.
 
-```json
-{
-  "plugin": [["opencode-graphify-refresh", { "connect": false }]]
-}
+```jsonc
+// OpenCode v1
+{ "plugin": [["opencode-graphify-refresh", { "connect": false }]] }
+
+// OpenCode v2
+{ "plugins": [{ "package": "opencode-graphify-refresh", "options": { "connect": false } }] }
 ```
 
 | Option      | Default | Meaning                                                                                  |
