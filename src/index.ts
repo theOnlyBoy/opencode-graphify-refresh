@@ -15,6 +15,7 @@ import v2 from './v2.js'
  */
 export default {
   id: v2.id,
-  setup: v2.setup,
-  server: GraphifyRefresh as Plugin,
+  setup: (ctx: Parameters<typeof v2.setup>[0]) => v2.setup(ctx),
+  // wrapper call (not a bare method reference) — lint: unbound-method
+  server: ((input, options) => GraphifyRefresh(input, options)) as Plugin,
 }
