@@ -65,19 +65,17 @@ Any project that runs `graphify update`.
 
 ## 📦 Installation
 
-One package, both runtimes — the default export carries a `setup` (v2) and a `server` (v1) implementation,
-so there is no separate entrypoint or version to pick.
+Add it to your [opencode.json](https://opencode.ai/docs/config/) — **v1 and v2 both** load this package:
 
 ```jsonc
-// OpenCode v1 — opencode.json
-{ "$schema": "https://opencode.ai/config.json", "plugin": ["opencode-graphify-refresh"] }
+// OpenCode v1
+{ "plugin": ["opencode-graphify-refresh"] }
 
-// OpenCode v2 — opencode.jsonc
-{ "$schema": "https://opencode.ai/config.json", "plugins": ["opencode-graphify-refresh"] }
+// OpenCode v2
+{ "plugins": ["opencode-graphify-refresh"] }
 ```
 
-Restart OpenCode. (v1 object entrypoints need OpenCode **>= 1.18.29**; older v1 releases should pin an
-older package version. The dual shape follows the official v2 migration guide.)
+Restart OpenCode.
 
 ## 🚀 Full setup — graphify + OKF + this plugin
 
@@ -201,38 +199,12 @@ npm run build      # or yarn build / pnpm build
 ```
 
 ```bash
-opencode           # run OpenCode from the project dir to test the plugin
-```
-
-The plugin is registered in `./opencode.json` as `"./dist/index.js"` (v1) — and that same file is the v2
-entrypoint too (the default object has `server` for v1 and `setup` for v2). On v2, local plugin files are
-discovered from `.opencode/plugins/`, so a one-line re-export is enough to exercise the build from the
-repo (`.opencode/` is gitignored):
-
-```ts
-// .opencode/plugins/graphify-refresh.ts
-export { default } from '../../dist/index.js'
+npm test           # v1 + v2 test suites
 ```
 
 ```bash
-npm test        # v1 + v2 suites
+opencode           # run OpenCode from the project dir
 ```
-
-### OpenCode plugin constraints
-
-Learned the hard way while building this one; a violation fails silently.
-
-- **Exactly one export.** opencode calls *every* export of the module as a plugin factory — the loader iterates `Object.values(module)` and invokes each one as `(PluginInput, options)`. Exporting a helper next to the plugin broke loading with `The "paths[0]" property must be of type string, got object`, and because a failed plugin is only *logged*, it simply never ran. Keep the plugin function as the module's only export; helpers stay module-private.
-- **ESM only.** The package needs `"type": "module"` (or the `.mjs` extension): a bare `.js` is parsed as CommonJS and its `import` statements fail.
-- **Never throw from a hook.** A throwing `tool.execute.after` can break a session — catch everything and report the failure in the tool output instead.
-- **Be idempotent and quiet.** A run with nothing to do must not mutate the graph and must not print anything.
-
-On **v2** the default export must be a plain object (`{ id, setup }`) — a function fails to load
-(`PluginModule.LoadError … SchemaError`). One object can serve both runtimes: **v1 calls
-`server(input, options)`**, **v2 calls `setup(ctx)`** (v1 needs >= 1.18.29). v2's hook is
-`ctx.tool.hook("execute.after", (event) => …)` with a **single mutable event** (not `(input, output)`);
-the shell tool is named `shell`, its command is `event.input.command`, and stdout lives at
-`event.result.output.output` (with a model-visible copy in `event.result.content`).
 
 ## 🤝 Contributing
 
